@@ -78,14 +78,14 @@ class jenkins(
   }
 
   file {$jenkins_home:
-    ensure => present,
+    ensure => directory,
     owner  => 'jenkins',
     group  => 'jenkins',
     mode   => '0755',
   }
 
   file {$jenkins_plugin_dir:
-    ensure => present,
+    ensure => directory,
     owner  => 'jenkins',
     group  => 'jenkins',
     mode   => '0755',
