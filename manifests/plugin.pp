@@ -29,6 +29,6 @@ define jenkins::plugin($version=0) {
       group   => 'jenkins',
       mode    => '0644',
       require => [Class['jenkins::package'], Exec["download-${name}"],],
-      notify  => Service['jenkins']
+      notify  => Class['jenkins::service']
   }
 }
