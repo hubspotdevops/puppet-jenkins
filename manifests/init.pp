@@ -60,6 +60,14 @@ class jenkins(
   anchor {'jenkins::begin':}
   anchor {'jenkins::end':}
 
+  if $config_hash['JENKINS_HOME']['value'] {
+    $jenkins_home = $config_hash['JENKINS_HOME']['value']
+  } else {
+    $jenkins_home = '/var/lib/jenkins'
+  }
+
+  $jenkins_plugin_dir = "${jenkins_home}/plugins"
+
   class {'jenkins::repo':
       lts  => $lts,
       repo => $repo;
@@ -67,6 +75,20 @@ class jenkins(
 
   class {'jenkins::package' :
       version => $version;
+  }
+
+  file {$jenkins_home:
+    ensure => present,
+    owner  => 'jenkins',
+    group  => 'jenkins',
+    mode   => '0755',
+  }
+
+  file {$jenkins_plugin_dir:
+    ensure => present,
+    owner  => 'jenkins',
+    group  => 'jenkins',
+    mode   => '0755',
   }
 
   class { 'jenkins::config':
@@ -86,10 +108,12 @@ class jenkins(
   Anchor['jenkins::begin'] ->
     Class['jenkins::repo'] ->
       Class['jenkins::package'] ->
-        Class['jenkins::config'] ->
-          Class['jenkins::plugins']~>
-            Class['jenkins::service'] ->
-                Anchor['jenkins::end']
+        File[$jenkins_home] ->
+          File[$jenkins_plugin_dir] ->
+            Class['jenkins::config'] ->
+              Class['jenkins::plugins']~>
+                Class['jenkins::service'] ->
+                  Anchor['jenkins::end']
 
   if $configure_firewall {
     Class['jenkins::service'] ->
