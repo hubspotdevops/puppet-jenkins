@@ -12,6 +12,16 @@ define jenkins::plugin($version=0) {
     $base_url = 'http://updates.jenkins-ci.org/latest/'
   }
 
+  if (!defined(File[$plugin_dir])) {
+    file {
+      [$plugin_parent_dir, $plugin_dir]:
+        ensure  => directory,
+        owner   => 'jenkins',
+        group   => 'jenkins',
+        require => [Group['jenkins'], User['jenkins']];
+    }
+  }
+
   exec {
     "download-${name}" :
       command    => "wget --no-check-certificate ${base_url}${plugin}",
