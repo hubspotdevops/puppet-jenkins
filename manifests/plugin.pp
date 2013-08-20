@@ -14,11 +14,12 @@ define jenkins::plugin($version=0) {
 
   if (!defined(File[$plugin_dir])) {
     file {
-      [$plugin_parent_dir, $plugin_dir]:
+      $plugin_dir:
         ensure  => directory,
         owner   => 'jenkins',
         group   => 'jenkins',
-        require => [Group['jenkins'], User['jenkins']];
+        mode    => '0755',
+        require => Class['jenkins::package'];
     }
   }
 
