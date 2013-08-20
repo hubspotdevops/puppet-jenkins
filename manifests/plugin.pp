@@ -24,9 +24,11 @@ define jenkins::plugin($version=0) {
 
   file {
     "${plugin_dir}/${plugin}" :
-      require => [Class['jenkins::package'], Exec["download-${name}"],]
+      ensure  => present,
       owner   => 'jenkins',
+      group   => 'jenkins',
       mode    => '0644',
+      require => [Class['jenkins::package'], Exec["download-${name}"],],
       notify  => Service['jenkins']
   }
 }
