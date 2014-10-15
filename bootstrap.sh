@@ -4,32 +4,56 @@
 
 export PATH=/var/lib/gems/1.8/bin:$PATH
 
-which puppet
+function provision_ubuntu() {
+    which puppet
 
-if [ $? -ne 0 ]; then
-    apt-get update
+    if [ $? -ne 0 ]; then
+        deb="puppetlabs-release-precise.deb"
+        wget "http://apt.puppetlabs.com/${deb}"
+        dpkg -i ./${deb}
+        apt-get update
+        apt-get install -y puppet
+    fi
+}
 
-    apt-get install -y ruby1.8 \
-                    ruby1.8-dev \
-                    libopenssl-ruby1.8 \
-                    rubygems
+function provision_rhel() {
+    which puppet
 
-    gem install puppet --version "~> 2.7" --no-ri --no-rdoc
-fi
+    if [ $? -ne 0 ]; then
+        rpm -ivh https://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-7.noarch.rpm
+        yum install -y puppet
+    fi
 
+}
 
-if [ ! -d "../stdlib" ]; then
-    (cd .. && \
-        wget "http://forge.puppetlabs.com/system/releases/p/puppetlabs/puppetlabs-stdlib-2.3.2.tar.gz" && \
-        mkdir stdlib && \
-        tar -zxf "puppetlabs-stdlib-2.3.2.tar.gz" -C stdlib --strip-components=1)
+grep -i "ubuntu" /etc/issue
+if [ $? -eq 0 ]; then
+    provision_ubuntu;
 fi;
 
-if [ ! -d "../apt" ]; then
-    (cd .. && \
-        wget "http://forge.puppetlabs.com/system/releases/p/puppetlabs/puppetlabs-apt-0.0.3.tar.gz" && \
-        mkdir apt && \
-        tar -zxf "puppetlabs-apt-0.0.3.tar.gz" -C apt --strip-components=1)
+grep -i "red hat" /etc/issue
+if [ $? -eq 0 ]; then
+    provision_rhel
 fi;
 
-puppet apply --verbose --modulepath=.. tests/site.pp
+# Install all our stupid dependencies
+for module in "stdlib" "apt" "java"; do
+    ls /etc/puppet/modules | grep $module
+
+    if [ $? -ne 0 ]; then
+        # Didn't find the module, install it!
+        puppet module install puppetlabs/${module}
+    else
+        echo ">> ${module} already installed"
+    fi;
+done;
+
+platform=`facter lsbdistid`
+
+# Set up a symbolic link to make sure we can include our $PWD as the "jenkins"
+# module for `puppet apply`
+ln -s $PWD /etc/puppet/modules/jenkins
+
+echo ">> Provision for ${platform}"
+puppet apply --verbose --modulepath=/etc/puppet/modules tests/${platform}.pp
+
