@@ -1,22 +1,15 @@
 # Class: jenkins::repo::debian
 #
-class jenkins::repo::debian ( $lts=0 )
+class jenkins::repo::debian
 {
-
-  include 'jenkins::repo'
-
-  if $jenkins::repo::lts == 0 {
-    apt::source { 'jenkins':
-      location    => 'http://pkg.jenkins-ci.org/debian',
-      release     => 'binary/',
-      repos       => '',
-      key         => 'D50582E6',
-      key_source  => 'http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key',
-      include_src => false,
-    }
-
+  if $caller_module_name != $module_name {
+    fail("Use of private class ${name} by ${caller_module_name}")
   }
-  elsif $jenkins::repo::lts == 1 {
+
+  include stdlib
+  include apt
+
+  if $::jenkins::lts  {
     apt::source { 'jenkins':
       location    => 'http://pkg.jenkins-ci.org/debian-stable',
       release     => 'binary/',
@@ -26,5 +19,21 @@ class jenkins::repo::debian ( $lts=0 )
       include_src => false,
     }
   }
+  else {
+    apt::source { 'jenkins':
+      location    => 'http://pkg.jenkins-ci.org/debian',
+      release     => 'binary/',
+      repos       => '',
+      key         => 'D50582E6',
+      key_source  => 'http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key',
+      include_src => false,
+    }
+  }
 
+  anchor { 'jenkins::repo::debian::begin': } ->
+    Apt::Source['jenkins'] ->
+    anchor { 'jenkins::repo::debian::end': }
 }
+
+
+

@@ -1,11 +1,17 @@
 # Parameters:
-# lts = 0  (Default)
+
+# version = 'installed' (Default)
+#   Will NOT update jenkins to the most recent version.
+# version = 'latest'
+#    Will automatically update the version of jenkins to the current version available via your package manager.
+#
+# lts = false  (Default)
 #   Use the most up to date version of jenkins
 #
-# lts = 1
+# lts = true
 #   Use LTS verison of jenkins
 #
-# repo = 1 (Default)
+# repo = true (Default)
 #   install the jenkins repo.
 #
 # repo = 0
@@ -20,7 +26,7 @@
 #
 # class{ 'jenkins::config':
 #   config_hash => {
-#     'PORT' => { 'value' => '9090' }, 'AJP_PORT' => { 'value' => '9009' }
+#     'HTTP_PORT' => { 'value' => '9090' }, 'AJP_PORT' => { 'value' => '9009' }
 #   }
 # }
 #
@@ -31,7 +37,7 @@
 #
 # class{ 'jenkins::plugins':
 #   plugin_hash => {
-#     'git' -> { version => '1.1.1' },
+#     'git' => { version => '1.1.1' },
 #     'parameterized-trigger' => {},
 #     'multiple-scms' => {},
 #     'git-client' => {},
@@ -49,14 +55,49 @@
 #    'git-client': {}
 #    'token-macro': {}
 #
+#
+# configure_firewall = undef (default)
+#   For folks that want to manage the puppetlabs firewall module.
+#    - If it's not present in the catalog, nothing happens.
+#    - If it is, you need to explicitly set this true / false.
+#       - We didn't want you to have a service opened automatically, or unreachable inexplicably.
+#    - This default changed in v1.0 to be undef.
+#
+#
+# install_java = true (default)
+#   - use puppetlabs-java module to install the correct version of a JDK.
+#   - Jenkins requires a JRE
+#
+#
+# cli = false (default)
+#   - force installation of the jenkins CLI jar to $libdir/cli/jenkins-cli.jar
+#   - the cli is automatically installed when needed by components that use it,
+#     such as the user and credentials types, and the security class
+#   - CLI installation (both implicit and explicit) requires the unzip command
+#
 class jenkins(
-  $version     = 'installed',
-  $lts         = 0,
-  $repo        = 1,
-  $config_hash = undef,
-  $plugin_hash = undef,
-  $configure_firewall = true
-) {
+  $version            = $jenkins::params::version,
+  $lts                = $jenkins::params::lts,
+  $repo               = $jenkins::params::repo,
+  $service_enable     = $jenkins::params::service_enable,
+  $service_ensure     = $jenkins::params::service_ensure,
+  $config_hash        = {},
+  $plugin_hash        = {},
+  $configure_firewall = undef,
+  $install_java       = $jenkins::params::install_java,
+  $proxy_host         = undef,
+  $proxy_port         = undef,
+  $cli                = undef,
+  $libdir             = $jenkins::params::libdir,
+) inherits jenkins::params {
+
+  validate_bool($lts, $install_java, $repo)
+  validate_hash($config_hash, $plugin_hash)
+
+  if $configure_firewall {
+    validate_bool($configure_firewall)
+  }
+
   anchor {'jenkins::begin':}
   anchor {'jenkins::end':}
 
@@ -68,14 +109,17 @@ class jenkins(
 
   $jenkins_plugin_dir = "${jenkins_home}/plugins"
 
-  class {'jenkins::repo':
-      lts  => $lts,
-      repo => $repo;
+
+  if $install_java {
+    class {'java':
+      distribution => 'jdk'
+    }
   }
 
-  class {'jenkins::package' :
-      version => $version;
+  if $repo {
+    include jenkins::repo
   }
+
 
   file {$jenkins_home:
     ensure => directory,
@@ -84,36 +128,51 @@ class jenkins(
     mode   => '0755',
   }
 
-  file {$jenkins_plugin_dir:
-    ensure => directory,
-    owner  => 'jenkins',
-    group  => 'jenkins',
-    mode   => '0755',
-  }
+  include jenkins::package
+  include jenkins::config
+  include jenkins::plugins
 
-  class { 'jenkins::config':
-      config_hash => $config_hash,
-  }
-
-  class { 'jenkins::plugins':
-      plugin_hash => $plugin_hash,
-  }
-
-  class {'jenkins::service':}
-
-  if ($configure_firewall){
-      class {'jenkins::firewall':}
+  if $proxy_host and $proxy_port {
+    class { 'jenkins::proxy':
+      require => Package['jenkins'],
+      notify  => Service['jenkins']
     }
+  }
+
+  include jenkins::service
+
+  if defined('::firewall') {
+    if $configure_firewall == undef {
+      fail('The firewall module is included in your manifests, please configure $configure_firewall in the jenkins module')
+    } elsif $configure_firewall {
+      include jenkins::firewall
+    }
+  }
+  if $cli {
+    include jenkins::cli
+  }
 
   Anchor['jenkins::begin'] ->
-    Class['jenkins::repo'] ->
-      Class['jenkins::package'] ->
-        File[$jenkins_home] ->
-          File[$jenkins_plugin_dir] ->
-            Class['jenkins::config'] ->
-              Class['jenkins::plugins']~>
-                Class['jenkins::service'] ->
-                  Anchor['jenkins::end']
+    Class['jenkins::package'] ->
+      File[$jenkins_home] ->
+        Class['jenkins::config'] ->
+          Class['jenkins::plugins']~>
+            Class['jenkins::service'] ->
+              Anchor['jenkins::end']
+
+  if $install_java {
+    Anchor['jenkins::begin'] ->
+      Class['java'] ->
+        Class['jenkins::package'] ->
+          Anchor['jenkins::end']
+  }
+
+  if $repo {
+    Anchor['jenkins::begin'] ->
+      Class['jenkins::repo'] ->
+        Class['jenkins::package'] ->
+          Anchor['jenkins::end']
+  }
 
   if $configure_firewall {
     Class['jenkins::service'] ->
